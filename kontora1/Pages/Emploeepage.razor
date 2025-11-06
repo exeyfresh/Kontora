@@ -1,0 +1,296 @@
+﻿@page "/employeepage"
+@using kontora1
+@using Npgsql
+@inject NpgsqlConnection dbConnection
+
+<div class="container">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <button class="add-button" @onclick="StartAdd">Добавить сотрудника</button>
+        <input type="search" @bind="searchId" placeholder="Поиск по ID" style="padding: 10px 15px;margin-bottom:10px;margin-left:10px; border-radius: 4px; border: 1px solid #ccc;" />
+    </div>
+
+    <table class="client-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Имя</th>
+                <th>Фамилия</th>
+                <th>Email</th>
+                <th>Телефон</th>
+                <th>Логин</th>
+                <th>Пароль</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var e in filteredEmployees)
+            {
+                <tr>
+                    <td>@e.id</td>
+                    <td>@e.firstname</td>
+                    <td>@e.lastname</td>
+                    <td>@e.email</td>
+                    <td>@e.number</td>
+                    <td>@e.login</td>
+                    <td>@e.password</td>
+                    <td>
+                        <button class="edit-button" @onclick="() => StartEdit(e)">Редактировать</button>
+                        <button class="delete-button" @onclick="() => DeleteEmployee(e.id)">Удалить</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (showDialog)
+    {
+        <div class="modal">
+            <div class="modal-content">
+                <h3>@(isEditMode ? "Редактировать" : "Добавить") сотрудника</h3>
+
+                <input placeholder="Имя" @bind="editingEmployee.firstname" />
+                <input placeholder="Фамилия" @bind="editingEmployee.lastname" />
+                <input placeholder="Email" @bind="editingEmployee.email" />
+                <input placeholder="Телефон" @bind="editingEmployee.number" />
+                <input placeholder="Логин" @bind="editingEmployee.login" />
+                <input placeholder="Пароль" @bind="editingEmployee.password" />
+
+                <br />
+                <button class="save-button" @onclick="SaveEmployee">Сохранить</button>
+                <button @onclick="() => showDialog = false">Отмена</button>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .form-group {
+        margin-bottom: 15px;
+        margin-right: 10px;
+    }
+
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        width: 350px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+        .modal-content h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 20px;
+            color: #333;
+            text-align: center;
+        }
+
+        .modal-content input,
+        .modal-content select,
+        .modal-content textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 15px;
+            background-color: white;
+            color: #333;
+            box-sizing: border-box;
+        }
+
+            .modal-content input:focus,
+            .modal-content select:focus,
+            .modal-content textarea:focus {
+                border-color: #007bff;
+                outline: none;
+                box-shadow: 0 0 5px rgba(0, 123, 255, 0.4);
+            }
+
+        .modal-content button {
+            padding: 8px 14px;
+            margin-right: 5px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .modal-content .save-button {
+            background-color: #007bff;
+            color: white;
+        }
+
+            .modal-content .save-button:hover {
+                background-color: #0069d9;
+            }
+
+        .modal-content .cancel-button {
+            background-color: #6c757d;
+            color: white;
+        }
+
+            .modal-content .cancel-button:hover {
+                background-color: #5a6268;
+            }
+
+    .status-select {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 10px;
+        margin-right: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background-color: white;
+        font-size: 16px;
+        color: #333;
+    }
+
+        .status-select:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+        }
+
+    .container {
+        margin-top: 20px;
+        padding: 0 20px;
+    }
+
+    .add-button {
+        margin-bottom: 10px;
+        padding: 10px 15px;
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+        .add-button:hover {
+            background-color: #218838;
+        }
+
+    .client-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+
+        .client-table th, .client-table td {
+            border: 1px solid #ccc;
+            padding: 8px 12px;
+            text-align: center;
+        }
+
+        .client-table th {
+            background-color: slategray;
+            color: white;
+        }
+
+        .client-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+    .edit-button {
+        background-color: #ffc107;
+        color: white;
+        padding: 5px 10px;
+        border: none;
+        border-radius: 4px;
+        margin-right: 5px;
+        cursor: pointer;
+    }
+
+        .edit-button:hover {
+            background-color: #e0a800;
+        }
+
+    .delete-button {
+        background-color: #dc3545;
+        color: white;
+        padding: 5px 10px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+        .delete-button:hover {
+            background-color: #c82333;
+        }
+</style>
+
+
+@code {
+    private List<Laywer> employees = new();
+    private Laywer editingEmployee = new();
+    private bool showDialog = false;
+    private bool isEditMode = false;
+    private string searchId = "";
+
+    private List<Laywer> filteredEmployees => string.IsNullOrWhiteSpace(searchId)
+        ? employees
+        : employees.Where(e => e.id.ToString().Contains(searchId)).ToList();
+
+    protected override void OnInitialized()
+    {
+        employees = Laywer.GetAllLaywers(dbConnection);
+    }
+
+    private void StartAdd()
+    {
+        editingEmployee = new Laywer();
+        isEditMode = false;
+        showDialog = true;
+    }
+
+    private void StartEdit(Laywer employee)
+    {
+        editingEmployee = new Laywer
+            {
+                id = employee.id,
+                firstname = employee.firstname,
+                lastname = employee.lastname,
+                number = employee.number,
+                email = employee.email,
+                login = employee.login,
+                password = employee.password
+            };
+        isEditMode = true;
+        showDialog = true;
+    }
+
+    private void SaveEmployee()
+    {
+        bool success = isEditMode
+            ? Laywer.UpdateLaywer(dbConnection, editingEmployee)
+            : Laywer.AddLaywer(dbConnection, editingEmployee);
+
+        if (success)
+        {
+            employees = Laywer.GetAllLaywers(dbConnection);
+            showDialog = false;
+        }
+    }
+
+    private void DeleteEmployee(int id)
+    {
+        if (Laywer.DeleteLaywer(dbConnection, id))
+        {
+            employees = Laywer.GetAllLaywers(dbConnection);
+        }
+    }
+}

@@ -1,0 +1,97 @@
+﻿@using Npgsql
+@inject NpgsqlConnection dbConnection
+@inject NavigationManager Navigation
+@inject UserState UserState
+@layout EmptyLayout
+@page "/"
+
+<div class="login-page">
+    <div class="rect"></div>
+    <div class="login-container">
+        <input type="text" placeholder="Введите логин" class="input" @bind="loginInput" />
+        <input type="password" placeholder="Введите пароль" class="input" @bind="passwordInput" />
+        <button type="button" class="login-button" @onclick="TryLogin">Войти</button>
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <p style="color: red;">@errorMessage</p>
+        }
+    </div>
+</div>
+
+@code {
+    private string loginInput;
+    private string passwordInput;
+    private string errorMessage;
+    private Users currentUser = new Users();
+
+
+    private async Task TryLogin()
+    {
+        var page = currentUser.Login(dbConnection, loginInput, passwordInput);
+
+        if (!string.IsNullOrEmpty(page))
+        {
+            UserState.Role = currentUser.role.ToLower(); // Сохраняем роль
+            Navigation.NavigateTo(page);
+        }
+        else
+        {
+            errorMessage = "Неверный логин или пароль.";
+        }
+    }
+
+}
+
+<style>
+    .login-page {
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: lightgray;
+    }
+
+    .login-container {
+        background-color: #ffffff; /* Белый фон для контейнера */
+        padding: 30px 40px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); /* Увеличенная тень для выделения */
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        width: 300px;
+        transition: transform 0.2s ease; /* Плавный эффект при наведении */
+    }
+
+        .login-container:hover {
+            transform: translateY(-5px); /* Поднимаем контейнер при наведении */
+        }
+
+    .input {
+        padding: 10px;
+        border: 1px solid #ccc; /* Светло-серый бордер */
+        font-size: 16px;
+        border-radius: 3px;
+        outline: none;
+        transition: border-color 0.2s ease;
+    }
+
+        .input:focus {
+            border-color: #007BFF; /* Цвет бордера при фокусе */
+        }
+
+    .login-button {
+        padding: 10px;
+        font-size: 16px;
+        border: none;
+        background-color: #007BFF; /* Спокойный синий цвет */
+        color: white; /* Белый текст */
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+        .login-button:hover {
+            background-color: #0056b3; /* Темнее синий при наведении */
+        }
+</style>

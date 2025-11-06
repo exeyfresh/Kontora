@@ -1,0 +1,620 @@
+﻿@page "/reportpage"
+@using kontora1.Pages
+@using Npgsql
+@inject NpgsqlConnection dbConnection
+
+<div class="reports-container">
+    <h3 class="reports-title">Формирование отчетов</h3>
+
+    <div class="button-group">
+        <button class="report-button income" @onclick="() => OpenModal(ReportType.Income)">Доходы</button>
+        <button class="report-button debt" @onclick="() => OpenModal(ReportType.Debt)">Задолженности</button>
+        <button class="report-button lawyer" @onclick="() => OpenModal(ReportType.Lawyer)">Работа юристов</button>
+    </div>
+
+    @if (showModal)
+    {
+        <div class="modal-backdrop">
+            <div class="modal-content-wrapper">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h4>@GetModalTitle()</h4>
+                        <button class="close-button" @onclick="CloseModal">×</button>
+                    </div>
+
+                    <div class="modal-body">
+                        @if (selectedReport == ReportType.Lawyer)
+                        {
+                            <div class="form-group">
+                                <label>Выберите юриста:</label>
+                                <select @bind="selectedLawyerId" class="form-input">
+                                    <option value="0">Все юристы</option>
+                                    @foreach (var lawyer in lawyers)
+                                    {
+                                        <option value="@lawyer.id_user">@lawyer.FullName</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+
+                        <div class="date-range-picker">
+                            <div class="date-input">
+                                <label><i class="far fa-calendar-alt"></i> Начальная дата:</label>
+                                <input type="date" @bind="startDate" class="form-input" />
+                            </div>
+                            <div class="date-input">
+                                <label><i class="far fa-calendar-alt"></i> Конечная дата:</label>
+                                <input type="date" @bind="endDate" class="form-input" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button class="generate-button" @onclick="GenerateSelectedReport">
+                            <i class="fas fa-file-export"></i> Сформировать
+                        </button>
+                        <button class="cancel-button" @onclick="CloseModal">
+                            <i class="fas fa-ban"></i> Отмена
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (currentReport != null)
+    {
+        <div class="report-result-container">
+            <div class="report-header">
+                <h4>Результат отчета</h4>
+                <button class="close-button small" @onclick="ClearReport">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="report-content">
+                @switch (currentReport)
+                {
+                    case Reports.IncomeReport incomeReport:
+                        <h5 class="report-title"> Отчет о доходах</h5>
+                        <p>Период: @incomeReport.Period</p>
+
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>№ счета</th>
+                                    <th>Сумма счета</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var bill in incomeReport.Bills)
+                                {
+                                    <tr>
+                                        <td>@bill.BillNumber</td>
+                                        <td>@bill.Amount.ToString("N0")</td>
+                                    </tr>
+                                }
+                                @if (incomeReport.Bills.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="2">Нет данных</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th>Итого</th>
+                                    <td>@incomeReport.TotalIncome.ToString("N0")</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2"></td>
+                                </tr>
+                                <tr>
+                                    <th>Количество счетов</th>
+                                    <td>@incomeReport.TotalBills</td>
+                                </tr>
+                                <tr>
+                                    <th>Количество оплаченных счетов</th>
+                                    <td>@incomeReport.TotalPaidBills</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        break;
+
+                    case Reports.DebtReport debtReport:
+                        <h5 class="report-title">Отчет о задолженностях</h5>
+                        <p>Период: @debtReport.Period</p>
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>Клиент</th>
+                                    <th>Сумма задолженности</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in debtReport.Items)
+                                {
+                                    <tr>
+                                        <td>@item.LastName @item.FirstName</td>
+                                        <td>@item.Amount.ToString("N2") руб.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th>Общая сумма задолженностей:</th>
+                                    <td>@debtReport.TotalDebt.ToString("N2") руб.</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        break;
+
+                    case Reports.LawyerWorkReport lawyerReport:
+                        <h5 class="report-title">Отчет о работе юристов</h5>
+                        <p>Период: @lawyerReport.Period</p>
+                        @if (lawyerReport.SelectedLawyerId.HasValue)
+                        {
+                            <p>Выбранный юрист: @lawyers.FirstOrDefault(l => l.id_user == lawyerReport.SelectedLawyerId)?.FullName</p>
+
+                        }
+                        else
+                        {
+                            <p>Все юристы</p>
+                        }
+
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>Юрист</th>
+                                    <th>Создано</th>
+                                    <th>В работе</th>
+                                    <th>Закрыто</th>
+                                    <th>Всего дел</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in lawyerReport.Items)
+                                {
+                                    <tr>
+                                        <td>@item.LawyerName</td>
+                                        <td>@item.CreatedCases</td>
+                                        <td>@item.InProgressCases</td>
+                                        <td>@item.ClosedCases</td>
+                                        <td>@item.TotalCases</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th>Итого:</th>
+                                    <td>@lawyerReport.TotalCreated</td>
+                                    <td>@lawyerReport.TotalInProgress</td>
+                                    <td>@lawyerReport.TotalClosed</td>
+                                    <td>@lawyerReport.TotalAllCases</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        break;
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private object currentReport = null;
+    private bool showModal = false;
+    private DateTime startDate = DateTime.Today.AddMonths(-1);
+    private DateTime endDate = DateTime.Today;
+    private ReportType selectedReport;
+    private List<Lawyer> lawyers = new();
+    private int selectedLawyerId = 0;
+
+    private enum ReportType { Income, Debt, Lawyer }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLawyers();
+    }
+
+    private async Task LoadLawyers()
+    {
+        try
+        {
+            if (dbConnection.State != System.Data.ConnectionState.Open)
+                await dbConnection.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(@"
+                SELECT id_user, firstname, lastname
+                FROM ""User""
+                WHERE role = 'lawyer'", dbConnection);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                lawyers.Add(new Lawyer
+                    {
+                        id_user = reader.GetInt32(0),
+                        firstname = reader.GetString(1),
+                        lastname = reader.GetString(2)
+                    });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при загрузке юристов: {ex.Message}");
+        }
+    }
+
+    private void OpenModal(ReportType type)
+    {
+        selectedReport = type;
+        selectedLawyerId = 0;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+    }
+
+    private void ClearReport()
+    {
+        currentReport = null;
+    }
+
+    private string GetModalTitle()
+    {
+        return selectedReport switch
+        {
+            ReportType.Income => "Отчет о доходах",
+            ReportType.Debt => "Отчет о задолженностях",
+            ReportType.Lawyer => "Отчет о работе юристов",
+            _ => "Формирование отчета"
+        };
+    }
+
+    private async Task GenerateSelectedReport()
+    {
+        showModal = false;
+
+        try
+        {
+            switch (selectedReport)
+            {
+                case ReportType.Income:
+                    currentReport = Reports.GenerateIncomeReport(dbConnection, startDate, endDate);
+                    break;
+                case ReportType.Debt:
+                    currentReport = Reports.GenerateDebtReport(dbConnection, startDate, endDate);
+                    break;
+                case ReportType.Lawyer:
+                    currentReport = await Reports.GenerateLawyerWorkReportAsync(dbConnection, startDate, endDate, selectedLawyerId);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при генерации отчета: {ex.Message}");
+        }
+    }
+
+    private class Lawyer
+    {
+        public int id_user { get; set; }
+        public string firstname { get; set; }
+        public string lastname { get; set; }
+        public string FullName => $"{lastname} {firstname}";
+    }
+}
+
+<style>
+    /* Основные стили */
+    .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+        font-size: 14px;
+    }
+
+        .report-table th, .report-table td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        .report-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .report-table tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .report-table tbody tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        .report-table tfoot tr {
+            background-color: #f1f1f1;
+            font-weight: bold;
+        }
+
+            .report-table tfoot tr:first-child {
+                background-color: #e9e9e9;
+            }
+
+            .report-table tfoot tr:empty {
+                background-color: transparent;
+                height: 10px;
+            }
+    .reports-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .reports-title {
+        color: #2c3e50;
+        margin-bottom: 30px;
+        font-size: 28px;
+        text-align: center;
+        font-weight: 600;
+    }
+
+    /* Стили кнопок */
+    .button-group {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 40px;
+        flex-wrap: wrap;
+    }
+
+    .report-button {
+        padding: 15px 25px;
+        border: none;
+        border-radius: 8px;
+        color: white;
+        cursor: pointer;
+        font-weight: bold;
+        text-align: center;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        width: 180px;
+    }
+
+        .report-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .report-button.income {
+            background-color: #3498db;
+        }
+
+        .report-button.debt {
+            background-color: #3498db;
+        }
+
+        .report-button.lawyer {
+            background-color: #3498db;
+        }
+
+    /* Модальное окно */
+    .modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .modal-content-wrapper {
+        width: 100%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 12px;
+        width: 100%;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
+    }
+
+    .modal-header {
+        padding: 20px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+        .modal-header h4 {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 20px;
+        }
+
+    .modal-body {
+        padding: 20px;
+    }
+
+    .close-button {
+        background: none;
+        border: none;
+        color: #7f8c8d;
+        cursor: pointer;
+        font-size: 18px;
+        transition: color 0.2s;
+    }
+
+        .close-button:hover {
+            color: #e74c3c;
+        }
+
+        .close-button.small {
+            font-size: 14px;
+        }
+
+    /* Форма в модальном окне */
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+    .form-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+
+    .date-range-picker {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .date-input {
+        display: flex;
+        flex-direction: column;
+    }
+
+        .date-input label {
+            margin-bottom: 8px;
+            color: #34495e;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+    /* Футер модального окна */
+    .modal-footer {
+        padding: 15px 20px;
+        background: #f8f9fa;
+        border-top: 1px solid #eee;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
+    .generate-button {
+        padding: 10px 20px;
+        background-color: #2ecc71;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .generate-button:hover {
+            background-color: #27ae60;
+        }
+
+    .cancel-button {
+        padding: 10px 20px;
+        background-color: #95a5a6;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .cancel-button:hover {
+            background-color: #7f8c8d;
+        }
+
+    /* Результаты отчета */
+    .report-result-container {
+        margin-top: 30px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    .report-header {
+        padding: 15px 20px;
+        background: #3498db;
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+        .report-header h4 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+    .report-content {
+        padding: 20px;
+        overflow-x: auto;
+    }
+
+    .report-title {
+        color: #2c3e50;
+        margin-top: 0;
+        margin-bottom: 15px;
+        font-size: 18px;
+    }
+
+    .report-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 15px 0;
+    }
+
+        .report-table th, .report-table td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        .report-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+
+        .report-table tfoot tr {
+            background-color: #f1f1f1;
+            font-weight: bold;
+        }
+
+        .report-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .report-table tr:hover {
+            background-color: #f1f1f1;
+        }
+</style>

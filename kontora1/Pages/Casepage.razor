@@ -1,0 +1,415 @@
+﻿@page "/casepage"
+@using Npgsql
+@inject NpgsqlConnection dbConnection
+@using kontora1
+
+@code {
+    private List<Case> cases = new();
+    private List<Client> clients = new();
+    private List<Bill> bills = new();
+    private bool showEditDialog = false;
+    private Case editingCase = new();
+    private bool isEditMode = false;
+    private int? searchId = null;
+    private List<Users> lawyers = new();
+    private IEnumerable<Case> filteredCases =>
+        searchId == null || searchId == 0 ?
+        cases :
+        cases.Where(x => x.id_case == searchId).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCases();
+        await LoadClients();
+        await LoadBills();
+        await LoadLawyers();
+    }
+    private async Task LoadLawyers()
+    {
+        try
+        {
+            if (dbConnection.State != System.Data.ConnectionState.Open)
+                await dbConnection.OpenAsync();
+
+            using (var command = new NpgsqlCommand(
+                "SELECT id_user, firstname, lastname FROM \"User\" WHERE role = 'lawyer'",
+                dbConnection))
+            {
+                using (var reader = await command.ExecuteReaderAsync())
+                {
+                    lawyers = new List<Users>();
+                    while (await reader.ReadAsync())
+                    {
+                        lawyers.Add(new Users
+                            {
+                                id = reader.GetInt32(0),
+                                firstname = reader.GetString(1),
+                                lastname = reader.GetString(2)
+                            });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при загрузке юристов: {ex.Message}");
+        }
+        finally
+        {
+            // Не закрываем соединение здесь, так как оно может использоваться другими методами
+            // Если нужно закрыть, убедитесь, что это не нарушит другие операции
+        }
+    }
+    private async Task LoadCases()
+    {
+        cases = Case.Get_case(dbConnection);
+        cases = cases.OrderBy(c => c.id_case).ToList();
+    }
+
+    private async Task LoadClients()
+    {
+        clients = Client.GetAllClients(dbConnection);
+    }
+
+    private async Task LoadBills()
+    {
+        bills = Bill.GetBills(dbConnection);
+    }
+    private string GetLawyerName(int id)
+    {
+        var lawyer = lawyers.FirstOrDefault(l => l.id == id);
+        return lawyer != null ? $"{lawyer.lastname} {lawyer.firstname}" : $"Юрист (ID: {id})";
+    }
+    private string GetClientName(int id)
+    {
+        var client = clients.FirstOrDefault(c => c.id == id);
+        return client != null ? $"{client.lastname} {client.firstname}" : $"Клиент (ID: {id})";
+    }
+
+    private string GetBillInfo(int id)
+    {
+        var bill = bills.FirstOrDefault(b => b.id_bill == id);
+        return bill != null ? $"Счет №{bill.id_bill} ({bill.price} руб.)" : $"Счет (ID: {id})";
+    }
+
+    private void StartAdd()
+    {
+        editingCase = new Case
+            {
+                data_add = DateTime.Today,
+                status = "Создано"
+            };
+        showEditDialog = true;
+        isEditMode = false;
+    }
+
+    private void StartEdit(Case c)
+    {
+        editingCase = new Case
+            {
+                id_case = c.id_case,
+                id_user = c.id_user,
+                id_bill = c.id_bill,
+                data_add = c.data_add,
+                status = c.status,
+                data_close = c.data_close
+            };
+        isEditMode = true;
+        showEditDialog = true;
+    }
+
+    private void SaveEdit()
+    {
+        bool success = isEditMode ?
+            Case.Update_status(dbConnection, editingCase) :
+            Case.Create_case(dbConnection, editingCase);
+
+        if (success)
+        {
+            _ = LoadCases();
+            showEditDialog = false;
+        }
+    }
+
+    private void Delete_case(int id)
+    {
+        if (Case.Delete_case(dbConnection, id))
+        {
+            _ = LoadCases();
+        }
+    }
+}
+
+<div class="container">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <button class="add-button" @onclick="StartAdd">Добавить дело</button>
+        <input type="search" placeholder="Поиск по ID" @bind-value="@searchId"
+               style="padding: 10px 15px; margin-bottom:10px; margin-left:10px; border-radius: 4px; border: 1px solid #ccc;" />
+    </div>
+
+    <table class="case-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Клиент</th>
+                <th>Юрист</th>
+                <th>Счет</th>
+                <th>Дата создания</th>
+                <th>Дата закрытия</th>
+                <th>Статус</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in filteredCases)
+            {
+                <tr>
+                    <td>@c.id_case</td>
+                    <td>@GetClientName(c.id_user)</td>
+                    <td>@GetLawyerName(c.id_lawyer)</td>
+                    <td>@GetBillInfo(c.id_bill)</td>
+                    <td>@c.data_add.ToShortDateString()</td>
+                    <td>@(c.data_close.HasValue ? c.data_close.Value.ToShortDateString() : "-")</td>
+                    <td>@c.status</td>
+                    <td>
+                        <button class="edit-button" @onclick="() => StartEdit(c)">Редактировать</button>
+                        <button class="delete-button" @onclick="() => Delete_case(c.id_case)">Удалить</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    @if (showEditDialog)
+    {
+        <div class="modal">
+            <div class="modal-content">
+                <h3>@(isEditMode ? "Редактировать дело" : "Добавить дело")</h3>
+
+                <div class="form-group">
+                    <label>Клиент:</label>
+                    <select @bind="editingCase.id_user" class="form-control">
+                        <option value="0">-- Выберите клиента --</option>
+                        @foreach (var client in clients)
+                        {
+                            <option value="@client.id">@($"{client.lastname} {client.firstname}")</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Юрист:</label>
+                    <select @bind="editingCase.id_lawyer" class="form-control">
+                        <option value="0">-- Выберите юриста --</option>
+                        @foreach (var lawyer in lawyers)
+                        {
+                            <option value="@lawyer.id">@($"{lawyer.lastname} {lawyer.firstname}")</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Счет:</label>
+                    <select @bind="editingCase.id_bill" class="form-control">
+                        <option value="0">-- Выберите счет --</option>
+                        @foreach (var bill in bills)
+                        {
+                            <option value="@bill.id_bill">Счет №@bill.id_bill (@bill.price руб.)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Дата создания:</label>
+                    <input type="date" @bind="editingCase.data_add" class="form-control" />
+                </div>
+
+                <div class="form-group">
+                    <label>Дата закрытия:</label>
+                    <input type="date" @bind="editingCase.data_close" class="form-control" />
+                </div>
+
+                <div class="form-group">
+                    <label>Статус:</label>
+                    <select @bind="editingCase.status" class="form-control">
+                        <option value="Создано">Создано</option>
+                        <option value="В работе">В работе</option>
+                        <option value="Закрыто">Закрыто</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button @onclick="SaveEdit" class="save-button">Сохранить</button>
+                    <button @onclick="() => showEditDialog = false" class="cancel-button">Отмена</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .container {
+        margin-top: 20px;
+        padding: 0 20px;
+        font-family: Arial, sans-serif;
+
+    }
+
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background-color: white;
+        padding: 25px;
+        border-radius: 8px;
+        width: 350px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+        .modal-content h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+    .form-control {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+
+        .form-control:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .save-button {
+        background-color: #007bff;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+        .save-button:hover {
+            background-color: #0069d9;
+        }
+
+    .cancel-button {
+        background-color: #6c757d;
+        color: white;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+        .cancel-button:hover {
+            background-color: #5a6268;
+        }
+
+    .add-button {
+        margin-bottom: 10px;
+        padding: 10px 15px;
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+
+        .add-button:hover {
+            background-color: #218838;
+        }
+
+    .case-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 14px;
+    }
+
+        .case-table th,
+        .case-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .case-table th {
+            background-color: slategray;
+            color: white;
+            font-weight: bold;
+        }
+
+        .case-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .case-table tr:hover {
+            background-color: #f1f1f1;
+        }
+
+    .edit-button {
+        background-color: #ffc107;
+        color: white;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        margin-right: 5px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+        .edit-button:hover {
+            background-color: #e0a800;
+        }
+
+    .delete-button {
+        background-color: #dc3545;
+        color: white;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+        .delete-button:hover {
+            background-color: #c82333;
+        }
+</style>
