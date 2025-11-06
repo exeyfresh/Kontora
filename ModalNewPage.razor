@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Добавление дела - Юридическая система</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+            opacity: 0;
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        
+        .modal-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 700px;
+            overflow: hidden;
+            transform: translateY(20px);
+            animation: slideUp 0.4s ease-out forwards;
+        }
+        
+        .modal-header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 24px 30px;
+            position: relative;
+        }
+        
+        .modal-body {
+            padding: 30px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        .form-group {
+            margin-bottom: 24px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #374151;
+            font-size: 14px;
+        }
+        
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s;
+            background-color: #f9fafb;
+        }
+        
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+            background-color: white;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 32px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: #6b7280;
+            border: 1px solid #d1d5db;
+        }
+        
+        .btn-secondary:hover {
+            background: #f9fafb;
+            color: #374151;
+        }
+        
+        .file-upload {
+            border: 2px dashed #d1d5db;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .file-upload:hover {
+            border-color: #4f46e5;
+            background: #f8faff;
+        }
+        
+        .file-upload i {
+            font-size: 40px;
+            color: #9ca3af;
+            margin-bottom: 12px;
+        }
+        
+        .file-upload.dragover {
+            border-color: #4f46e5;
+            background: #f0f4ff;
+        }
+        
+        .progress-bar {
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        
+        .progress {
+            height: 100%;
+            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            width: 0%;
+            transition: width 0.5s;
+        }
+        
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            background: #e0e7ff;
+            color: #4f46e5;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .tag i {
+            margin-left: 6px;
+            cursor: pointer;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @media (max-width: 640px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .modal-body {
+                padding: 20px;
+            }
+            
+            .modal-header {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Кнопка для демонстрации открытия модального окна -->
+    <button id="openModal" class="btn btn-primary" style="position: fixed; top: 20px; left: 20px; z-index: 10;">
+        <i class="fas fa-plus"></i> Открыть модальное окно
+    </button>
+
+    <!-- Модальное окно добавления дела -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2 class="text-xl font-bold flex items-center gap-3">
+                    <i class="fas fa-folder-plus"></i>
+                    Добавление нового дела
+                </h2>
+                <p class="mt-2 opacity-90">Заполните информацию о новом деле</p>
+                <button id="closeModal" class="absolute top-5 right-5 text-white text-xl hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <form id="caseForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="client">
+                                <i class="fas fa-user mr-2"></i>Клиент
+                            </label>
+                            <select class="form-select" id="client" required>
+                                <option value="">Выберите клиента</option>
+                                <option value="1">Иванов Иван</option>
+                                <option value="2">Петров Петр</option>
+                                <option value="3">Сидорова Анна</option>
+                                <option value="4">Кузнецов Алексей</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="lawyer">
+                                <i class="fas fa-user-tie mr-2"></i>Ответственный юрист
+                            </label>
+                            <select class="form-select" id="lawyer" required>
+                                <option value="">Выберите юриста</option>
+                                <option value="1">Репс Артем</option>
+                                <option value="2">Смирнова Ольга</option>
+                                <option value="3">Васильев Дмитрий</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="caseTitle">
+                            <i class="fas fa-heading mr-2"></i>Название дела
+                        </label>
+                        <input type="text" class="form-input" id="caseTitle" placeholder="Введите название дела" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="caseDescription">
+                            <i class="fas fa-align-left mr-2"></i>Описание дела
+                        </label>
+                        <textarea class="form-textarea" id="caseDescription" rows="3" placeholder="Опишите суть дела"></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="caseType">
+                                <i class="fas fa-tag mr-2"></i>Тип дела
+                            </label>
+                            <select class="form-select" id="caseType" required>
+                                <option value="">Выберите тип</option>
+                                <option value="civil">Гражданское</option>
+                                <option value="criminal">Уголовное</option>
+                                <option value="administrative">Административное</option>
+                                <option value="corporate">Корпоративное</option>
+                                <option value="family">Семейное</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="priority">
+                                <i class="fas fa-flag mr-2"></i>Приоритет
+                            </label>
+                            <select class="form-select" id="priority" required>
+                                <option value="low">Низкий</option>
+                                <option value="medium" selected>Средний</option>
+                                <option value="high">Высокий</option>
+                                <option value="urgent">Срочный</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" for="openingDate">
+                                <i class="fas fa-calendar-plus mr-2"></i>Дата открытия
+                            </label>
+                            <input type="date" class="form-input" id="openingDate" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="deadline">
+                                <i class="fas fa-calendar-check mr-2"></i>Срок выполнения
+                            </label>
+                            <input type="date" class="form-input" id="deadline">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="budget">
+                            <i class="fas fa-money-bill-wave mr-2"></i>Бюджет (руб.)
+                        </label>
+                        <input type="number" class="form-input" id="budget" placeholder="0.00" min="0" step="0.01">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-paperclip mr-2"></i>Прикрепленные файлы
+                        </label>
+                        <div class="file-upload" id="fileUpload">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p class="font-medium">Перетащите файлы сюда или нажмите для загрузки</p>
+                            <p class="text-sm text-gray-500 mt-1">Максимальный размер файла: 10MB</p>
+                            <input type="file" id="fileInput" multiple style="display: none;">
+                        </div>
+                        <div id="fileList" class="mt-4"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-tags mr-2"></i>Теги
+                        </label>
+                        <div class="flex flex-wrap gap-2 mb-2" id="tagContainer">
+                            <!-- Теги будут добавляться динамически -->
+                        </div>
+                        <div class="flex">
+                            <input type="text" class="form-input rounded-r-none" id="tagInput" placeholder="Добавьте тег">
+                            <button type="button" class="bg-indigo-500 text-white px-4 rounded-r-lg hover:bg-indigo-600 transition" id="addTagBtn">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelBtn">
+                            <i class="fas fa-times"></i> Отмена
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Сохранить дело
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Элементы DOM
+        const openModalBtn = document.getElementById('openModal');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const closeModalBtn = document.getElementById('closeModal');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const caseForm = document.getElementById('caseForm');
+        const fileUpload = document.getElementById('fileUpload');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const tagInput = document.getElementById('tagInput');
+        const addTagBtn = document.getElementById('addTagBtn');
+        const tagContainer = document.getElementById('tagContainer');
+        
+        // Открытие модального окна
+        openModalBtn.addEventListener('click', () => {
+            modalOverlay.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        });
+        
+        // Закрытие модального окна
+        function closeModal() {
+            modalOverlay.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        closeModalBtn.addEventListener('click', closeModal);
+        cancelBtn.addEventListener('click', closeModal);
+        
+        // Закрытие при клике вне модального окна
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                closeModal();
+            }
+        });
+        
+        // Обработка отправки формы
+        caseForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            // В реальном приложении здесь будет отправка данных на сервер
+            alert('Дело успешно создано!');
+            closeModal();
+            caseForm.reset();
+            fileList.innerHTML = '';
+            tagContainer.innerHTML = '';
+        });
+        
+        // Загрузка файлов
+        fileUpload.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUpload.classList.add('dragover');
+        });
+        
+        fileUpload.addEventListener('dragleave', () => {
+            fileUpload.classList.remove('dragover');
+        });
+        
+        fileUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUpload.classList.remove('dragover');
+            
+            if (e.dataTransfer.files.length) {
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+        
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                handleFiles(fileInput.files);
+            }
+        });
+        
+        function handleFiles(files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                // Проверка размера файла (10MB)
+                if (file.size > 10 * 1024 * 1024) {
+                    alert(`Файл "${file.name}" превышает максимальный размер 10MB`);
+                    continue;
+                }
+                
+                const fileItem = document.createElement('div');
+                fileItem.className = 'flex items-center justify-between bg-gray-50 p-3 rounded-lg mb-2';
+                
+                fileItem.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-file text-indigo-500 mr-3"></i>
+                        <div>
+                            <p class="font-medium">${file.name}</p>
+                            <p class="text-sm text-gray-500">${formatFileSize(file.size)}</p>
+                        </div>
+                    </div>
+                    <button type="button" class="text-red-500 hover:text-red-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                
+                // Удаление файла
+                fileItem.querySelector('button').addEventListener('click', () => {
+                    fileItem.remove();
+                });
+                
+                fileList.appendChild(fileItem);
+            }
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Управление тегами
+        addTagBtn.addEventListener('click', addTag);
+        
+        tagInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTag();
+            }
+        });
+        
+        function addTag() {
+            const tagText = tagInput.value.trim();
+            
+            if (tagText) {
+                const tag = document.createElement('div');
+                tag.className = 'tag';
+                tag.innerHTML = `
+                    ${tagText}
+                    <i class="fas fa-times"></i>
+                `;
+                
+                tag.querySelector('i').addEventListener('click', () => {
+                    tag.remove();
+                });
+                
+                tagContainer.appendChild(tag);
+                tagInput.value = '';
+            }
+        }
+        
+        // Установка даты по умолчанию
+        const today = new Date();
+        const nextWeek = new Date();
+        nextWeek.setDate(today.getDate() + 7);
+        
+        document.getElementById('openingDate').valueAsDate = today;
+        document.getElementById('deadline').valueAsDate = nextWeek;
+    </script>
+</body>
+</html>
