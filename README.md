@@ -26,3 +26,9 @@
 ```bash
 git clone https://github.com/exeyfresh/Kontora.git
 cd Kontora
+
+# Восстановление пакетов
+dotnet restore
+
+# Запуск приложения
+dotnet run
